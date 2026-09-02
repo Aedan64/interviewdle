@@ -1,93 +1,239 @@
-# vinext-starter
+# Interviewdle
 
-A clean full-stack starter running on [vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and Drizzle support.
+Interviewdle is a daily interview-practice web app designed to help students and early-career engineers improve how they answer technical interview questions.
 
-## Prerequisites
+Every day, users receive one interview question based on their selected career path. After submitting an answer, Interviewdle gives a score, highlights important concepts that were covered or missed, and shows an interview-ready example answer.
 
-- Node.js `>=22.13.0`
-- Linux with `flock`, `curl`, and GNU `timeout`
+The goal is simple: **one question every day, better interview answers over time.**
 
-## Sites Lifecycle
+## Live Site
 
-The Sites lifecycle CLI runs the locked dependency install before returning this checkout. Edit the source under `app/`, then checkpoint when a coherent milestone is ready to inspect or share. The remote Sites builder runs `npm run build` against the pushed commit. Do not repeat install or build as a normal pre-checkpoint step.
+https://interviewdle.com
 
-This starter does not use `wrangler.jsonc`.
+## Current Career Track
 
-`install:ci` is intentionally a single, non-retrying `npm ci`. It refuses a concurrent install for the same project, consumes a matching image-seeded npm cache with `--prefer-offline` while retaining registry fallback for a missing cache object, otherwise downloads and verifies the complete vinext tarball recorded in `package-lock.json`, limits npm to one socket, and terminates a stalled install. `build` applies a short timeout. These helpers target Linux and use GNU `timeout`; they are not native macOS scripts.
+* Computer Hardware Engineering
 
-Scripts that need writable project-scoped home, npm, XDG, and temporary paths use `scripts/sites-env.sh`. The `dev` and `start` scripts honor the caller's runtime environment and keep Wrangler logs inside the checkout. The generated `.sites-runtime/` directory is disposable and ignored by Git.
+Additional majors and career paths are planned for future versions.
 
-## Included Shape
+## Features
 
-- edit site code under `app/`
-- `app/chatgpt-auth.ts` provides optional dispatch-owned ChatGPT sign-in helpers
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/index.ts` reads the D1 binding from the Cloudflare Worker environment
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
+* One technical interview question per day
+* Daily question resets at midnight Eastern Time
+* Technical answer scoring
+* Feedback showing concepts covered
+* Feedback showing concepts that could be added
+* Interview-ready example answers
+* AI-style response detection that encourages users to answer in their own words
+* Daily streak tracking
+* Total questions completed
+* Average score tracking
+* Guest mode
+* Account sign-in
+* Progress syncing across devices for signed-in users
 
-## Workspace Auth Headers
+## Result Sharing
 
-OpenAI workspace sites can read the current user's email from `oai-authenticated-user-email`.
+Users can share their daily Interviewdle result.
 
-SIWC-authenticated workspace sites may also receive `oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty `name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by `oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
+Current sharing options include:
 
-Treat the full name as optional and fall back to email when it is absent:
+* Download result as an image
+* Instagram Story format — 9:16
+* Desktop / social format — 16:9
+* Native device sharing
+* Post result to X
+* Email result
+* Share daily score and streak
 
-```tsx
-import { headers } from "next/headers";
+Shared results should direct users back to:
 
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
+https://interviewdle.com
 
-  const displayName = fullName ?? email;
-  // ...
-}
+## Authentication
+
+Interviewdle currently uses Clerk for authentication.
+
+Supported sign-in options can include:
+
+* Google
+* Email
+* Other providers configured through Clerk
+
+Authentication is used to save user progress across devices.
+
+## Tech Stack
+
+* Next.js
+* React
+* TypeScript
+* Clerk
+* Drizzle ORM
+* Cloudflare / Vinext hosting
+* CSS
+* Lucide icons
+
+## Environment Variables
+
+Environment variables should be stored locally and should **never be committed to GitHub**.
+
+Create an environment file such as:
+
+```text
+.env.local
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+The exact variables depend on the authentication and database configuration being used.
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs optional or required ChatGPT sign-in:
+Example:
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send anonymous visitors through Sign in with ChatGPT.
-- In a Server Component, start sign-in with `<a href={chatGPTSignInPath(returnTo)} target="_top">`. The auth helper module is server-only; do not import it into a Client Component.
-- Do not use `fetch`, XHR, a client-side router, or a framework link that can prefetch the sign-in route. SIWC must start as a top-level navigation.
-- Never request the AuthAPI authorization endpoint directly. The dispatch-owned `/signin-with-chatgpt` route must start the SIWC flow.
-- Use `chatGPTSignOutPath(returnTo)` for browser sign-out links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because they depend on per-request identity headers.
+```text
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
+CLERK_SECRET_KEY=
+```
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the OAuth cookies, and identity header injection. Do not implement app routes for those reserved paths. Routes that do not import and call the helper remain anonymous-compatible.
+Never place real API keys, secrets, database credentials, or authentication tokens directly inside the source code.
 
-SIWC establishes identity only; it does not prove workspace membership. Use the Sites hosting platform's access policy controls for workspace-wide restrictions, or enforce explicit server-side membership or allowlist checks.
+Make sure `.env`, `.env.local`, and other environment files remain listed in `.gitignore`.
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write actions tied to the current ChatGPT user. Leave public content anonymous.
+## Local Development
 
-## Diagnostic Commands
+Clone the repository:
 
-- `npm run install:ci`: perform the one bounded lockfile install
-- `npm run dev`: start the Vite/Vinext development server
-- `npm run build`: build the deployable Sites artifact
-- `npm run start`: start the built Vinext application
-- `npm test`: build and verify the rendered development-preview metadata
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+```bash
+git clone https://github.com/Aedan64/interviewdle.git
+```
 
-Use build commands for targeted diagnosis after a remote failure, not as part of the normal checkpoint path.
+Enter the project:
 
-The timeout defaults can be overridden for a controlled canary with `SITES_INSTALL_TIMEOUT`, `SITES_INSTALL_KILL_AFTER`, `SITES_BUILD_TIMEOUT`, and `SITES_BUILD_KILL_AFTER`. A timeout fails the command; the helpers never retry an unchanged install or build.
+```bash
+cd interviewdle
+```
 
-## Learn More
+Install dependencies:
 
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+```bash
+npm install
+```
+
+Create the required environment file and add your environment variables.
+
+Then start the development server:
+
+```bash
+npm run dev
+```
+
+Open the local development URL shown in the terminal.
+
+## Daily Question System
+
+Interviewdle uses a shared daily question rather than generating a different question for every user.
+
+The date is calculated using:
+
+```text
+America/New_York
+```
+
+This means the daily Interviewdle changes at midnight Eastern Time for everyone, regardless of where the user is located.
+
+The timezone automatically handles EST and EDT.
+
+## Current Question Categories
+
+The current Computer Hardware Engineering track includes topics such as:
+
+* Digital Logic
+* Computer Architecture
+* Embedded Systems
+* FPGA Design
+* Hardware Debugging
+
+Future versions can expand the question bank significantly.
+
+## Planned Features
+
+Potential future improvements include:
+
+* More majors and job roles
+* Larger question banks
+* Difficulty progression
+* Personalized question history
+* User profiles
+* Detailed performance analytics
+* Category-specific performance
+* Weekly and monthly progress
+* Leaderboards
+* Achievements
+* Improved AI-generated-answer detection
+* Better scoring using an AI evaluation model
+* Custom interview practice
+* Friends and social features
+* More share-card designs
+* LinkedIn sharing
+* Interview preparation recommendations
+
+## Project Structure
+
+Important files currently include:
+
+```text
+app/
+  page.tsx
+  globals.css
+  layout.tsx
+  api/
+
+db/
+components/
+lib/
+hooks/
+```
+
+### `app/page.tsx`
+
+Contains the main Interviewdle interface and game logic, including:
+
+* Daily question display
+* Answer submission
+* Answer scoring
+* Results
+* Streaks
+* Sharing
+* Authentication UI
+
+### `app/globals.css`
+
+Contains the main visual styling for Interviewdle, including:
+
+* Main interface
+* Interview card
+* Answer section
+* Result screen
+* Share result panel
+* Mobile responsiveness
+
+## Security
+
+Do not commit:
+
+* `.env`
+* `.env.local`
+* Clerk secret keys
+* database secrets
+* API keys
+* access tokens
+* private credentials
+
+Only variables explicitly intended for browser use should use the `NEXT_PUBLIC_` prefix.
+
+## Repository
+
+https://github.com/Aedan64/interviewdle
+
+## Goal
+
+Interviewdle is meant to make technical interview preparation feel more like a daily habit than a long study session.
+
+**One question. Every day. A better answer each time.**
