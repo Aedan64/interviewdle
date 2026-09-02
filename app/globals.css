@@ -10,6 +10,19 @@
   --lime: #dff36b;
   --line: #dce4dd;
   --soft: #eef4ef;
+  --answer: #e3eee4;
+}
+
+[data-theme="dark"] {
+  --ink: #e8eee9;
+  --muted: #aab8ae;
+  --paper: #111814;
+  --green: #62c995;
+  --lime: #dff36b;
+  --line: #304238;
+  --soft: #1d2a22;
+  --answer: #1a3024;
+  color-scheme: dark;
 }
 
 * {
@@ -22,6 +35,11 @@ body {
   color: var(--ink);
   font-family: Arial, Helvetica, sans-serif;
   font-size: 16px;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+[data-theme="dark"] body {
+  background: var(--paper);
 }
 
 button,
@@ -36,7 +54,7 @@ textarea {
 .topbar {
   height: 74px;
   border-bottom: 1px solid var(--line);
-  background: #fffffff0;
+  background: color-mix(in srgb, var(--paper) 92%, transparent);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -70,7 +88,7 @@ textarea {
 .header-stats {
   display: flex;
   gap: 24px;
-  color: #465049;
+  color: var(--muted);
   font-weight: 700;
   font-size: 14px;
 }
@@ -88,12 +106,39 @@ textarea {
 
 .sign-in {
   border: 1px solid #cfd9d1;
-  background: white;
+  background: var(--soft);
   color: var(--green);
   border-radius: 9px;
   padding: 8px 13px;
   font-weight: 800;
   cursor: pointer;
+}
+
+.theme-picker {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--soft);
+}
+
+.theme-picker button {
+  width: 29px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.theme-picker button.active {
+  color: var(--ink);
+  background: var(--paper);
+  box-shadow: 0 1px 4px #0000001f;
 }
 
 /* =========================
@@ -124,7 +169,7 @@ textarea {
 
 .career-select {
   height: 45px;
-  background: white;
+  background: var(--soft);
   border: 1px solid var(--line);
   border-radius: 11px;
   padding: 0 14px;
@@ -150,7 +195,7 @@ textarea {
 .career-menu {
   position: absolute;
   top: 72px;
-  background: white;
+  background: var(--soft);
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -175,6 +220,28 @@ textarea {
   font-size: 13px;
   color: var(--muted);
   margin: 10px;
+}
+
+[data-theme="dark"] .tags span,
+[data-theme="dark"] .save-note {
+  background: #24352a;
+  border-color: var(--line);
+  color: #c5d6c9;
+}
+
+[data-theme="dark"] .tags .difficulty {
+  background: #203d2b;
+  color: #9be0b6;
+}
+
+[data-theme="dark"] .ideal {
+  background: #26321c;
+}
+
+[data-theme="dark"] .rewrite {
+  background: #3c321d;
+  border-color: #8d6b2c;
+  color: #f0d79d;
 }
 
 .mini-stats {
@@ -204,8 +271,8 @@ textarea {
 ========================= */
 
 .game-card {
-  background: white;
-  border: 1px solid #d7dfd8;
+  background: var(--soft);
+  border: 1px solid var(--line);
   border-radius: 24px;
   box-shadow: 0 20px 60px #21382814;
   padding: 34px 40px;
@@ -320,7 +387,8 @@ textarea {
   resize: vertical;
   outline: none;
   line-height: 1.55;
-  background: #fbfcfb;
+  background: var(--answer);
+  color: var(--ink);
 }
 
 .answer-box textarea:focus {
@@ -727,6 +795,19 @@ textarea {
 
 .share-buttons button:active {
   transform: scale(0.98);
+}
+
+[data-theme="dark"] .share-panel,
+[data-theme="dark"] .share-formats button,
+[data-theme="dark"] .share-buttons button {
+  background: var(--soft);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+[data-theme="dark"] .share-formats button.active {
+  background: var(--ink);
+  color: var(--paper);
 }
 
 /* =========================
