@@ -1,7 +1,7 @@
-import { env } from "cloudflare:workers";
 import { createRemoteJWKSet, jwtVerify } from "jose";
+import { getDatabase } from "interviewdle-db-runtime";
 
-const issuer = "https://immense-parrot-301.clerk.accounts.dev";
+const issuer = process.env.CLERK_ISSUER_URL ?? "https://immense-parrot-301.clerk.accounts.dev";
 const jwks = createRemoteJWKSet(new URL(`${issuer}/.well-known/jwks.json`));
 
 async function userId(request: Request) {
@@ -16,17 +16,19 @@ async function userId(request: Request) {
 export async function GET(request: Request) {
   const id = await userId(request);
   if (!id) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  const row = await env.DB.prepare("SELECT question_date, answer, score_tenths, result_label, hits_json, misses_json FROM progress WHERE user_id = ? ORDER BY question_date DESC LIMIT 1").bind(id).first();
-  const dates = await env.DB.prepare("SELECT question_date FROM progress WHERE user_id = ? ORDER BY question_date DESC LIMIT 400").bind(id).all<{ question_date: string }>();
+  const db = getDatabase();
+  const row = await db.prepare("SELECT question_date, answer, score_tenths, result_label, hits_json, misses_json FROM progress WHERE user_id = ? ORDER BY question_date DESC LIMIT 1").bind(id).first();
+  const dates = await db.prepare("SELECT question_date FROM progress WHERE user_id = ? ORDER BY question_date DESC LIMIT 400").bind(id).all() as { results: { question_date: string }[] };
   return Response.json({ latest: row, dates: dates.results.map((item) => item.question_date), played: dates.results.length });
 }
 
 export async function POST(request: Request) {
   const id = await userId(request);
   if (!id) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const db = getDatabase();
   const body = await request.json() as { date?: string; answer?: string; score?: number; label?: string; hits?: string[]; misses?: string[] };
   if (!body.date || !body.answer || typeof body.score !== "number" || !body.label) return Response.json({ error: "Invalid result" }, { status: 400 });
-  await env.DB.prepare("INSERT INTO progress (user_id, question_date, answer, score_tenths, result_label, hits_json, misses_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id, question_date) DO UPDATE SET answer = excluded.answer, score_tenths = excluded.score_tenths, result_label = excluded.result_label, hits_json = excluded.hits_json, misses_json = excluded.misses_json")
+  await db.prepare("INSERT INTO progress (user_id, question_date, answer, score_tenths, result_label, hits_json, misses_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id, question_date) DO UPDATE SET answer = excluded.answer, score_tenths = excluded.score_tenths, result_label = excluded.result_label, hits_json = excluded.hits_json, misses_json = excluded.misses_json")
     .bind(id, body.date, body.answer.slice(0,900), Math.round(body.score*10), body.label, JSON.stringify(body.hits ?? []), JSON.stringify(body.misses ?? []), new Date().toISOString()).run();
   return Response.json({ saved: true });
 }
