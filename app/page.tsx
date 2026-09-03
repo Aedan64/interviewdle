@@ -15,6 +15,8 @@ import {
   Sun,
 } from "lucide-react";
 import {SignedIn,SignedOut,SignInButton,UserButton,useAuth} from "@clerk/clerk-react";
+import { SpeedInsights } from '@vercel/speed-insights/next';
+
 
 const QUESTIONS=[
 {category:"Digital Logic",difficulty:"Easy",question:"What is the difference between combinational logic and sequential logic?",terms:["input","memory","state","flip-flop"],ideal:"Combinational logic produces an output based only on its current inputs. Sequential logic also depends on stored state from earlier inputs, usually held in memory elements such as flip-flops or registers."},
