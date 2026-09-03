@@ -126,6 +126,31 @@ npm run dev
 
 Open the local development URL shown in the terminal.
 
+## Deployment
+
+The repository supports both hosting targets:
+
+* Cloudflare uses `npm run dev`, `npm run build`, and the Vinext Worker in `worker/index.ts`. It keeps using the configured D1 and R2 bindings.
+* Vercel uses `vercel.json`, `npm run dev:vercel`, and `npm run build:vercel`. It uses Vercel Postgres for signed-in progress.
+
+To configure Vercel:
+
+1. Import the repository into Vercel and leave the framework as Next.js.
+2. Create a Postgres database from the Vercel Storage or Marketplace tab and connect it to the project. This supplies `POSTGRES_URL`.
+3. Run the SQL in `db/vercel-schema.sql` against that database using the database provider's SQL console.
+4. Add these environment variables in the Vercel project for Preview and Production:
+
+```text
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
+CLERK_SECRET_KEY=
+CLERK_ISSUER_URL=https://your-clerk-issuer
+POSTGRES_URL=
+```
+
+Use `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` for the browser key. The app also accepts the legacy `CLERK_PUBLISHABLE_KEY` name, but the public variable takes precedence. Use the issuer URL without `/.well-known/jwks.json`; the API appends that path when validating tokens.
+
+Deploy with the default Vercel build settings. The checked-in `vercel.json` selects `npm ci`, `npm run build:vercel`, and `next dev` for local Vercel-mode development.
+
 ## Daily Question System
 
 Interviewdle uses a shared daily question rather than generating a different question for every user.

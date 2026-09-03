@@ -19,7 +19,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
-        <Providers publishableKey={process.env.CLERK_PUBLISHABLE_KEY ?? ""}>{children}</Providers>
+        <Providers publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? process.env.CLERK_PUBLISHABLE_KEY ?? ""}>{children}</Providers>
       </body>
     </html>
   );

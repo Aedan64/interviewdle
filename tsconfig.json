@@ -19,7 +19,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "interviewdle-db-runtime": ["./db/runtime.ts"]
     }
   },
   "include": [
