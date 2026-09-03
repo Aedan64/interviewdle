@@ -141,13 +141,13 @@ To configure Vercel:
 4. Add these environment variables in the Vercel project for Preview and Production:
 
 ```text
-CLERK_PUBLISHABLE_KEY=
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
 CLERK_SECRET_KEY=
 CLERK_ISSUER_URL=https://your-clerk-issuer
 POSTGRES_URL=
 ```
 
-`CLERK_PUBLISHABLE_KEY` may be replaced by `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`; the app accepts either name. Use the issuer URL without `/.well-known/jwks.json`; the API appends that path when validating tokens.
+Use `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` for the browser key. The app also accepts the legacy `CLERK_PUBLISHABLE_KEY` name, but the public variable takes precedence. Use the issuer URL without `/.well-known/jwks.json`; the API appends that path when validating tokens.
 
 Deploy with the default Vercel build settings. The checked-in `vercel.json` selects `npm ci`, `npm run build:vercel`, and `next dev` for local Vercel-mode development.
 
