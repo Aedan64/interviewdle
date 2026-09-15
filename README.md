@@ -20,11 +20,12 @@ Additional majors and career paths are planned for future versions.
 
 * One technical interview question per day
 * Daily question resets at midnight Eastern Time
-* Technical answer scoring
+* Local rubric-based answer scoring with no paid AI/API usage
 * Feedback showing concepts covered
 * Feedback showing concepts that could be added
 * Interview-ready example answers
-* AI-style response detection that encourages users to answer in their own words
+* Low-quality and keyword-stuffing detection
+* 365 daily hardware-engineering questions
 * Daily streak tracking
 * Total questions completed
 * Average score tracking
@@ -91,6 +92,8 @@ Example:
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
 CLERK_SECRET_KEY=
 ```
+
+The grader does not need `OPENAI_API_KEY` or any other paid AI key.
 
 Never place real API keys, secrets, database credentials, or authentication tokens directly inside the source code.
 
@@ -165,6 +168,12 @@ This means the daily Interviewdle changes at midnight Eastern Time for everyone,
 
 The timezone automatically handles EST and EDT.
 
+The built-in bank contains exactly 365 questions covering 73 topics in five interview styles. After question 365, the annual bank repeats. To replace a question or customize its rubric, edit `data/question-overrides.json`. A complete copy-and-paste example is in `data/README.md`.
+
+## Local Grading
+
+Answers are graded inside the Interviewdle server using the selected question's rubric. The grader checks required concepts, accepted synonyms, optional depth, relevance, explanation quality, minimum length, repeated/gibberish text, keyword dumping, and listed misconceptions. It sends no answer to OpenAI and consumes no AI tokens.
+
 ## Current Question Categories
 
 The current Computer Hardware Engineering track includes topics such as:
@@ -182,7 +191,6 @@ Future versions can expand the question bank significantly.
 Potential future improvements include:
 
 * More majors and job roles
-* Larger question banks
 * Difficulty progression
 * Personalized question history
 * User profiles
@@ -191,8 +199,7 @@ Potential future improvements include:
 * Weekly and monthly progress
 * Leaderboards
 * Achievements
-* Improved AI-generated-answer detection
-* Better scoring using an AI evaluation model
+* A private question-editor dashboard
 * Custom interview practice
 * Friends and social features
 * More share-card designs
