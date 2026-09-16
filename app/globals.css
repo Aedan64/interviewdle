@@ -157,6 +157,52 @@ textarea {
   align-items: end;
   margin-bottom: 26px;
   position: relative;
+  gap: 20px;
+}
+
+.career-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.career-tabs button {
+  background: var(--soft);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  padding: 12px 14px;
+  font-weight: 700;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.career-tabs button[aria-selected="true"] {
+  background: var(--green);
+  color: white;
+  border-color: var(--green);
+}
+
+[data-theme="dark"] .career-tabs button[aria-selected="true"] { color: var(--paper); }
+
+.career-tabs button:focus-visible {
+  outline: 3px solid var(--green);
+  outline-offset: 3px;
+}
+
+.career-description {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.share-track { font-size: 14px; font-weight: 700; margin: 10px 0; }
+
+@media (max-width: 720px) {
+  .career-row { align-items: start; flex-direction: column; gap: 16px; }
+  .career-tabs { flex-wrap: nowrap; }
+  .career-tabs button { flex: 1; padding: 10px; font-size: 13px; }
 }
 
 .eyebrow {

@@ -1,5 +1,10 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { getDatabase } from "interviewdle-db-runtime";
+import { DEFAULT_CAREER, isCareerId } from "@/data/careers";
+import { getDailyQuestion } from "@/data/question-bank";
+import { isCalendarDate } from "@/lib/daily";
+import { gradeLocally } from "@/lib/local-grader";
+import { readAccountProgress, writeAccountProgress } from "@/lib/progress-store";
 
 const issuer = process.env.CLERK_ISSUER_URL ?? "https://immense-parrot-301.clerk.accounts.dev";
 const jwks = createRemoteJWKSet(new URL(`${issuer}/.well-known/jwks.json`));
@@ -16,19 +21,37 @@ async function userId(request: Request) {
 export async function GET(request: Request) {
   const id = await userId(request);
   if (!id) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  const db = getDatabase();
-  const row = await db.prepare("SELECT question_date, answer, score_tenths, result_label, hits_json, misses_json FROM progress WHERE user_id = ? ORDER BY question_date DESC LIMIT 1").bind(id).first();
-  const dates = await db.prepare("SELECT question_date FROM progress WHERE user_id = ? ORDER BY question_date DESC LIMIT 400").bind(id).all() as { results: { question_date: string }[] };
-  return Response.json({ latest: row, dates: dates.results.map((item) => item.question_date), played: dates.results.length });
+  const career = new URL(request.url).searchParams.get("career") ?? DEFAULT_CAREER;
+  if (!isCareerId(career)) return Response.json({ error: "Invalid career" }, { status: 400 });
+  try {
+    const progress = await readAccountProgress(getDatabase(), id, career);
+    return Response.json(progress, { headers: { "Cache-Control": "private, no-store" } });
+  } catch (error) {
+    console.error("Unable to load career progress:", error);
+    return Response.json({ error: "Account progress is temporarily unavailable" }, { status: 503 });
+  }
 }
 
 export async function POST(request: Request) {
   const id = await userId(request);
   if (!id) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  const db = getDatabase();
-  const body = await request.json() as { date?: string; answer?: string; score?: number; label?: string; hits?: string[]; misses?: string[] };
-  if (!body.date || !body.answer || typeof body.score !== "number" || !body.label) return Response.json({ error: "Invalid result" }, { status: 400 });
-  await db.prepare("INSERT INTO progress (user_id, question_date, answer, score_tenths, result_label, hits_json, misses_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id, question_date) DO UPDATE SET answer = excluded.answer, score_tenths = excluded.score_tenths, result_label = excluded.result_label, hits_json = excluded.hits_json, misses_json = excluded.misses_json")
-    .bind(id, body.date, body.answer.slice(0,900), Math.round(body.score*10), body.label, JSON.stringify(body.hits ?? []), JSON.stringify(body.misses ?? []), new Date().toISOString()).run();
-  return Response.json({ saved: true });
+  try {
+    const body = await request.json() as { career?: unknown; date?: unknown; answer?: unknown; questionId?: unknown } | null;
+    const career = body?.career ?? DEFAULT_CAREER;
+    if (!body || !isCareerId(career) || !isCalendarDate(body.date) || typeof body.answer !== "string" || !body.answer.trim() || body.answer.length > 900) {
+      return Response.json({ error: "Invalid result" }, { status: 400 });
+    }
+    const question = getDailyQuestion(career, body.date);
+    if (body.questionId !== undefined && body.questionId !== question.id) {
+      return Response.json({ error: "The question does not match this career and date" }, { status: 400 });
+    }
+    const answer = body.answer.trim();
+    // Save the same local rubric result, never a client-supplied score.
+    await writeAccountProgress(getDatabase(), id, career, body.date, answer, gradeLocally(question, answer));
+    return Response.json({ saved: true, career });
+  } catch (error) {
+    if (error instanceof SyntaxError) return Response.json({ error: "Invalid JSON" }, { status: 400 });
+    console.error("Unable to save career progress:", error);
+    return Response.json({ error: "Account progress is temporarily unavailable" }, { status: 503 });
+  }
 }

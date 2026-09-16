@@ -10,11 +10,12 @@ The goal is simple: **one question every day, better interview answers over time
 
 https://interviewdle.com
 
-## Current Career Track
+## Career Tracks
 
 * Computer Hardware Engineering
+* Electrical Engineering
 
-Additional majors and career paths are planned for future versions.
+Choose a tab to switch tracks. Each has its own daily question, saved result, completion count, and streak. The selection is remembered on the device, and shared links open the selected track.
 
 ## Features
 
@@ -26,9 +27,10 @@ Additional majors and career paths are planned for future versions.
 * Interview-ready example answers
 * Low-quality and keyword-stuffing detection
 * 365 daily hardware-engineering questions
+* 365 individually authored Electrical Engineering questions, answers, and rubrics across 13 subjects
 * Daily streak tracking
 * Total questions completed
-* Average score tracking
+* Today's score per track
 * Guest mode
 * Account sign-in
 * Progress syncing across devices for signed-in users
@@ -168,11 +170,27 @@ This means the daily Interviewdle changes at midnight Eastern Time for everyone,
 
 The timezone automatically handles EST and EDT.
 
-The built-in bank contains exactly 365 questions covering 73 topics in five interview styles. After question 365, the annual bank repeats. To replace a question or customize its rubric, edit `data/question-overrides.json`. A complete copy-and-paste example is in `data/README.md`.
+The Hardware bank contains 365 prompts covering 73 topics in five interview styles. The Electrical bank contains 365 individually authored questions with distinct model answers, interleaving 13 categories: circuits, AC/transients, analog, semiconductors, power electronics, power systems, machines, signals/DSP, controls, electromagnetics/RF, instrumentation, PCB/EMC, and design/troubleshooting.
+
+Both use the calendar-day number starting September 1, 2026, and repeat after their bank is exhausted. Open tabs update at Eastern midnight and when returning after sleep. Each track cycles independently, and switching does not reset or overwrite another track's progress.
+
+Browse [all 365 Electrical questions](data/ELECTRICAL-QUESTIONS.md). Edit the Electrical bank in `data/electrical-question-bank.json` or add replacements in `data/electrical-question-overrides.json`. Hardware retains `data/question-overrides.json`. Instructions are in [data/README.md](data/README.md).
 
 ## Local Grading
 
 Answers are graded inside the Interviewdle server using the selected question's rubric. The grader checks required concepts, accepted synonyms, optional depth, relevance, explanation quality, minimum length, repeated/gibberish text, keyword dumping, and listed misconceptions. It sends no answer to OpenAI and consumes no AI tokens.
+
+This is rule-based practice feedback: it cannot reliably recognize every valid paraphrase or technical contradiction. Improve a question's accepted phrases and misconception rules as you review answers. Question data is public, so this is a practice tool rather than a secure examination.
+
+## Progress compatibility
+
+Existing Hardware account rows remain in `progress`. Electrical account results use `track_progress`, keyed by account, career, and date. The application creates that table on first use through the existing database connection; no new service or API key is required. The database user must have permission to create tables. Creation is idempotent for concurrent requests.
+
+Browser saves are scoped to both career and signed-in account (or guest). Old `interviewdle` browser data remains available to the Hardware guest. An old client with no `career` field still uses Hardware. The progress API recomputes saved scores using the selected career's local rubric.
+
+## Validation
+
+Run `npm run test:careers` for bank integrity, grading, API routing, Eastern/DST rotation, legacy saves, and independent account progress. Run `npm run build:vercel` for the production build, with the existing Clerk publishable key configured.
 
 ## Current Question Categories
 

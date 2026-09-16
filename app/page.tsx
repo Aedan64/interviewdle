@@ -1,403 +1,153 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import {
-  Check,
-  ChevronDown,
-  Download,
-  Flame,
-  Mail,
-  Moon,
-  RotateCcw,
-  Share2,
-  Sparkles,
-  Sun,
-  Target,
-  Trophy,
-} from "lucide-react";
-
-import {
-  SignedIn,
-  SignedOut,
-  SignInButton,
-  UserButton,
-  useAuth,
-} from "@clerk/clerk-react";
-
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Check, Download, Flame, Mail, Moon, RotateCcw, Share2, Sparkles, Sun, Target, Trophy } from "lucide-react";
+import { SignedIn, SignedOut, SignInButton, UserButton, useAuth } from "@clerk/clerk-react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
-import { QUESTIONS } from "@/data/questions";
+import { CAREERS, DEFAULT_CAREER, careerLabel, type CareerId } from "@/data/careers";
+import { getDailyQuestion } from "@/data/question-bank";
+import { getEasternDate, questionNumberFromDate, streakFrom, isCalendarDate } from "@/lib/daily";
+import { getSelectedCareer, selectCareer, subscribeCareer, subscribeEasternDate } from "@/lib/browser-career";
+import { normalizeResult, progressStorageKey, readLocalProgress, type SavedResult } from "@/lib/browser-progress";
+import type { ProgressRow } from "@/lib/progress-store";
 
-/* =========================
-   TYPES
-========================= */
-
-type Result = {
-  score: number;
-  label: string;
-  verdict: string;
-  strengths: string[];
-  improvements: string[];
-};
-
+type Result = SavedResult;
 type Theme = "light" | "dark";
 type ShareFormat = "story" | "wide";
-
-/* =========================
-   DATE HELPERS
-========================= */
-
-function getEasternDate(date = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date);
-
-  const year = parts.find((part) => part.type === "year")?.value;
-  const month = parts.find((part) => part.type === "month")?.value;
-  const day = parts.find((part) => part.type === "day")?.value;
-
-  return `${year}-${month}-${day}`;
-}
-
-function questionNumberFromDate(dateString: string) {
-  const startDate = new Date("2026-09-01T00:00:00Z");
-  const currentDate = new Date(`${dateString}T00:00:00Z`);
-
-  const daysSinceStart = Math.floor(
-    (currentDate.getTime() - startDate.getTime()) / 86400000
-  );
-
-  return Math.max(1, daysSinceStart + 1);
-}
-
-function streakFrom(dates: string[]) {
-  const completed = new Set(dates);
-
-  const todayEastern = getEasternDate();
-  const cursor = new Date(`${todayEastern}T00:00:00Z`);
-
-  let total = 0;
-
-  while (true) {
-    const key = cursor.toISOString().slice(0, 10);
-
-    if (!completed.has(key)) break;
-
-    total++;
-    cursor.setUTCDate(cursor.getUTCDate() - 1);
-  }
-
-  return total;
-}
-
-function fallbackVerdict(label: string) {
-  if (label === "Interview Ready") {
-    return "This answer would likely satisfy an interviewer without needing much clarification.";
-  }
-
-  if (label === "Strong") {
-    return "This is a solid interview response, though a little more precision or depth could make it stronger.";
-  }
-
-  if (label === "Needs More Depth") {
-    return "This shows some understanding, but an interviewer would likely want a clearer or more complete explanation.";
-  }
-
-  if (label === "Weak") {
-    return "This answer would raise concerns because important concepts are missing or unclear.";
-  }
-
-  return "This answer would not demonstrate enough relevant understanding in a technical interview.";
-}
-
-/* =========================
-   PAGE
-========================= */
+const serverCareer = () => DEFAULT_CAREER;
+const serverDate = () => "";
 
 export default function Home() {
-  const { isSignedIn, getToken } = useAuth();
+  const { isLoaded, userId } = useAuth();
+  const career = useSyncExternalStore(subscribeCareer, getSelectedCareer, serverCareer);
+  const today = useSyncExternalStore(subscribeEasternDate, getEasternDate, serverDate);
+  if (!today || !isLoaded) return <main className="shell" aria-busy="true"><p>Loading today’s interview…</p></main>;
+  // Remounting isolates drafts, delayed responses, results and share cards when
+  // the track, calendar day, or signed-in person changes.
+  return <InterviewGame key={`${career}:${today}:${userId ?? "guest"}`} career={career} today={today} viewerId={userId ?? null} />;
+}
 
-  const [answer, setAnswer] = useState("");
-  const [result, setResult] = useState<Result | null>(null);
+function InterviewGame({ career, today, viewerId }: { career: CareerId; today: string; viewerId: string | null }) {
+  const { isSignedIn, getToken } = useAuth();
+  const careerName = careerLabel(career);
+  const [initial] = useState(() => {
+    try { return readLocalProgress(localStorage, career, viewerId); }
+    catch { return { completedDates: [] } as ReturnType<typeof readLocalProgress>; }
+  });
+  const [answer, setAnswer] = useState(initial.date === today ? initial.answer ?? "" : "");
+  const [result, setResult] = useState<Result | null>(initial.date === today ? initial.result ?? null : null);
   const [rewrite, setRewrite] = useState(false);
   const [grading, setGrading] = useState(false);
-
-  const [menu, setMenu] = useState(false);
-
+  const [syncing, setSyncing] = useState(Boolean(isSignedIn));
+  const [notice, setNotice] = useState("");
   const [shareOpen, setShareOpen] = useState(false);
-  const [shareFormat, setShareFormat] =
-    useState<ShareFormat>("story");
-
-  const [streak, setStreak] = useState(0);
-  const [played, setPlayed] = useState(0);
-  const [completedDates, setCompletedDates] =
-    useState<string[]>([]);
-
-  const [theme, setTheme] = useState<Theme>("light");
-
-  const today = getEasternDate();
+  const [shareFormat, setShareFormat] = useState<ShareFormat>("story");
+  const [completedDates, setCompletedDates] = useState(initial.completedDates);
+  const [theme, setTheme] = useState<Theme>(() => {
+    try { return localStorage.getItem("interviewdle-theme") === "dark" ? "dark" : "light"; }
+    catch { return "light"; }
+  });
+  const attemptVersion = useRef(0);
+  const submitting = useRef(false);
   const number = questionNumberFromDate(today);
-
-  const q = useMemo(
-    () => QUESTIONS[(number - 1) % QUESTIONS.length],
-    [number]
-  );
-
-  /* =========================
-     THEME
-  ========================= */
-
-  useEffect(() => {
-    const saved = localStorage.getItem("interviewdle-theme");
-
-    if (saved === "dark" || saved === "light") {
-      setTheme(saved);
-    }
-  }, []);
+  const q = getDailyQuestion(career, today);
+  const streak = streakFrom(completedDates, today);
+  const played = completedDates.length;
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem("interviewdle-theme", theme);
+    try { localStorage.setItem("interviewdle-theme", theme); } catch { /* Theme still works for this visit. */ }
   }, [theme]);
-
-  /* =========================
-     LOCAL PROGRESS
-  ========================= */
-
-  useEffect(() => {
-    const saved = JSON.parse(
-      localStorage.getItem("interviewdle") || "{}"
-    );
-
-    const dates: string[] = Array.isArray(saved.completedDates)
-      ? saved.completedDates
-      : saved.date && saved.result
-        ? [saved.date]
-        : [];
-
-    setCompletedDates(dates);
-    setStreak(streakFrom(dates));
-    setPlayed(dates.length);
-
-    if (saved.date === today && saved.result) {
-      setAnswer(saved.answer || "");
-
-      const oldResult = saved.result;
-
-      const normalized: Result = {
-        score: oldResult.score ?? 0,
-        label: oldResult.label ?? "Needs More Depth",
-        verdict:
-          oldResult.verdict ??
-          fallbackVerdict(
-            oldResult.label ?? "Needs More Depth"
-          ),
-        strengths:
-          oldResult.strengths ??
-          oldResult.hits ??
-          [],
-        improvements:
-          oldResult.improvements ??
-          oldResult.misses ??
-          [],
-      };
-
-      setResult(normalized);
-    }
-  }, [today]);
-
-  /* =========================
-     ACCOUNT PROGRESS
-  ========================= */
 
   useEffect(() => {
     if (!isSignedIn) return;
-
+    const abort = new AbortController();
+    let cancelled = false;
+    const startingAttempt = attemptVersion.current;
     void (async () => {
       try {
         const token = await getToken();
-
-        const response = await fetch("/api/progress", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+        if (cancelled) return;
+        const response = await fetch(`/api/progress?career=${career}`, {
+          headers: { Authorization: `Bearer ${token}` }, signal: abort.signal,
         });
-
-        if (!response.ok) return;
-
-        const data = await response.json();
-
-        const dates: string[] = data.dates || [];
-
-        setCompletedDates(dates);
-        setPlayed(dates.length);
-        setStreak(streakFrom(dates));
-
+        if (!response.ok) throw new Error("Progress sync failed");
+        const data = await response.json() as { dates?: unknown; latest?: ProgressRow | null };
+        if (cancelled || attemptVersion.current !== startingAttempt) return;
+        const dates = Array.isArray(data.dates) ? data.dates.filter(isCalendarDate) : [];
+        setCompletedDates((current) => [...new Set([...current, ...dates])]);
         const latest = data.latest;
-
         if (latest?.question_date === today) {
-          const label =
-            latest.result_label || "Needs More Depth";
-
-          const savedResult: Result = {
-            score: latest.score_tenths / 10,
-            label,
-            verdict: fallbackVerdict(label),
-            strengths: JSON.parse(
-              latest.hits_json || "[]"
-            ),
-            improvements: JSON.parse(
-              latest.misses_json || "[]"
-            ),
-          };
-
-          setAnswer(latest.answer || "");
-          setResult(savedResult);
+          const saved = normalizeResult({
+            score: latest.score_tenths / 10, label: latest.result_label,
+            strengths: JSON.parse(latest.hits_json || "[]"),
+            improvements: JSON.parse(latest.misses_json || "[]"),
+          });
+          if (saved) { setAnswer(latest.answer); setResult(saved); }
         }
-      } catch (error) {
-        console.error(
-          "Could not load progress:",
-          error
-        );
+      } catch {
+        if (!cancelled) setNotice("Couldn’t sync account history. You can still practice on this device.");
+      } finally {
+        if (!cancelled) setSyncing(false);
       }
     })();
-  }, [isSignedIn, getToken, today]);
+    return () => { cancelled = true; abort.abort(); };
+  }, [isSignedIn, getToken, career, today]);
 
-  /* =========================
-     SAVE PROGRESS
-  ========================= */
-
-  async function saveProgress(
-    clean: string,
-    next: Result
-  ) {
+  async function saveProgress(clean: string, savedOnDevice: boolean) {
     if (!isSignedIn) return;
-
     try {
       const token = await getToken();
-
-      await fetch("/api/progress", {
+      const response = await fetch("/api/progress", {
         method: "POST",
-
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-
-        body: JSON.stringify({
-          date: today,
-          answer: clean,
-          score: next.score,
-          label: next.label,
-          hits: next.strengths,
-          misses: next.improvements,
-        }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ career, questionId: q.id, date: today, answer: clean }),
       });
-    } catch (error) {
-      console.error(
-        "Could not save progress:",
-        error
-      );
+      if (!response.ok) throw new Error("Save failed");
+    } catch {
+      setNotice(savedOnDevice
+        ? "Your result is saved on this device, but account sync failed."
+        : "Your result could not be saved. Keep this page open to review it.");
     }
   }
 
-  /* =========================
-     SUBMIT / LOCAL GRADER
-  ========================= */
-
   async function submit() {
     const clean = answer.trim();
-
-    if (clean.length < 18 || grading) return;
-
-    const signals = [
-      "in conclusion",
-      "it is important to note",
-      "furthermore",
-      "plays a crucial role",
-      "delve",
-    ];
-
-    const aiSignalCount = signals.filter(
-      (signal) =>
-        clean.toLowerCase().includes(signal)
-    ).length;
-
-    if (
-      (clean.length > 420 ||
-        aiSignalCount >= 2) &&
-      !rewrite
-    ) {
+    if (clean.length < 18 || submitting.current || syncing) return;
+    if (getEasternDate() !== today) { setNotice("A new daily question is ready. Refresh to start it."); return; }
+    const signals = ["in conclusion", "it is important to note", "furthermore", "plays a crucial role"];
+    if ((clean.length > 420 || signals.filter((signal) => clean.toLowerCase().includes(signal)).length >= 2) && !rewrite) {
       setRewrite(true);
       return;
     }
-
+    submitting.current = true;
+    attemptVersion.current++;
     setGrading(true);
-
+    setNotice("");
     try {
       const response = await fetch("/api/grade", {
-        method: "POST",
-
-        headers: {
-          "Content-Type": "application/json",
-        },
-
-        body: JSON.stringify({
-          questionId: q.id,
-          answer: clean,
-        }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ career, questionId: q.id, answer: clean }),
       });
-
-      if (!response.ok) {
-        const errorData = await response
-          .json()
-          .catch(() => null);
-
-        console.error(
-          "Grading API error:",
-          errorData
-        );
-
-        throw new Error("Grading failed");
-      }
-
-      const next =
-        (await response.json()) as Result;
-
-      const dates =
-        completedDates.includes(today)
-          ? completedDates
-          : [today, ...completedDates];
-
+      if (!response.ok) throw new Error("Grading failed");
+      const next = normalizeResult(await response.json());
+      if (!next) throw new Error("Invalid grade");
+      const dates = [...new Set([today, ...completedDates])];
       setCompletedDates(dates);
       setResult(next);
       setRewrite(false);
-      setStreak(streakFrom(dates));
-      setPlayed(dates.length);
-
-      localStorage.setItem(
-        "interviewdle",
-        JSON.stringify({
-          date: today,
-          answer: clean,
-          result: next,
-          completedDates: dates,
-        })
-      );
-
-      void saveProgress(clean, next);
-    } catch (error) {
-      console.error(
-        "Could not grade answer:",
-        error
-      );
-
-      alert(
-        "We couldn't grade your answer right now. Please try again."
-      );
+      let savedOnDevice = false;
+      try {
+        localStorage.setItem(progressStorageKey(career, viewerId), JSON.stringify({
+          date: today, questionId: q.id, answer: clean, result: next, completedDates: dates,
+        }));
+        savedOnDevice = true;
+      } catch { setNotice("Your browser couldn’t save this result on this device."); }
+      void saveProgress(clean, savedOnDevice);
+    } catch {
+      setNotice("We couldn’t grade your answer right now. Please try again.");
     } finally {
+      submitting.current = false;
       setGrading(false);
     }
   }
@@ -542,6 +292,8 @@ export default function Home() {
     ctx.font =
       `${isStory ? 34 : 28}px Arial`;
 
+    ctx.fillText(careerName, left, isStory ? 825 : 565);
+
     ctx.fillText(
       q.category,
       left,
@@ -580,7 +332,7 @@ export default function Home() {
       document.createElement("a");
 
     link.download =
-      `interviewdle-${String(
+      `interviewdle-${career}-${String(
         number
       ).padStart(
         3,
@@ -603,10 +355,10 @@ export default function Home() {
     const text =
       `I scored ${result.score}/10 on Interviewdle ` +
       `#${String(number).padStart(3, "0")} — ${result.label}. ` +
-      `${streak} day streak.`;
+      `${careerName}. ${streak} day streak.`;
 
     const canonicalUrl =
-      "https://interviewdle.com";
+      `https://interviewdle.com/?track=${career}`;
 
     const canvas =
       createShareCanvas();
@@ -629,7 +381,7 @@ export default function Home() {
           const file =
             new File(
               [blob],
-              `interviewdle-${number}.png`,
+              `interviewdle-${career}-${number}.png`,
               {
                 type: "image/png",
               }
@@ -700,12 +452,12 @@ export default function Home() {
             3,
             "0"
           )} — ${result.label}. ` +
-          `${streak} day streak.`
+          `${careerName}. ${streak} day streak.`
       );
 
     const url =
       encodeURIComponent(
-        "https://interviewdle.com"
+        `https://interviewdle.com/?track=${career}`
       );
 
     window.open(
@@ -739,9 +491,9 @@ export default function Home() {
             3,
             "0"
           )} — ${result.label}.\n\n` +
-          `${streak} day streak\n` +
+          `${careerName}\n${streak} day streak\n` +
           `${q.category}\n\n` +
-          `Try Interviewdle:\nhttps://interviewdle.com`
+          `Try Interviewdle:\nhttps://interviewdle.com/?track=${career}`
       );
 
     window.location.href =
@@ -847,37 +599,32 @@ export default function Home() {
               YOUR CAREER
             </p>
 
-            <button
-              className="career-select"
-              onClick={() =>
-                setMenu(!menu)
-              }
-            >
-              <span className="chip-icon">
-                ⌁
-              </span>
-
-              Computer Hardware Engineer
-
-              <ChevronDown size={17} />
-            </button>
-
-            {menu && (
-              <div className="career-menu">
+            <div className="career-tabs" role="tablist" aria-label="Engineering career">
+              {CAREERS.map((item, index) => (
                 <button
-                  onClick={() =>
-                    setMenu(false)
-                  }
+                  key={item.id}
+                  id={`tab-${item.id}`}
+                  role="tab"
+                  type="button"
+                  aria-selected={career === item.id}
+                  aria-controls="daily-interview-panel"
+                  tabIndex={career === item.id ? 0 : -1}
+                  onClick={() => selectCareer(item.id)}
+                  onKeyDown={(event) => {
+                    const next = event.key === "Home" ? 0 : event.key === "End" ? CAREERS.length - 1
+                      : event.key === "ArrowRight" ? (index + 1) % CAREERS.length
+                        : event.key === "ArrowLeft" ? (index + CAREERS.length - 1) % CAREERS.length : null;
+                    if (next === null) return;
+                    event.preventDefault();
+                    selectCareer(CAREERS[next].id);
+                    requestAnimationFrame(() => document.getElementById(`tab-${CAREERS[next].id}`)?.focus());
+                  }}
                 >
-                  <Check size={16} />
-                  Computer Hardware Engineer
+                  {item.shortLabel}
                 </button>
-
-                <p>
-                  More careers coming soon
-                </p>
-              </div>
-            )}
+              ))}
+            </div>
+            <p className="career-description">One daily question per track. New questions at midnight Eastern.</p>
           </div>
 
           <div className="mini-stats">
@@ -896,12 +643,12 @@ export default function Home() {
                 %
               </b>
 
-              <span>AVG. SCORE</span>
+              <span>TODAY&apos;S SCORE</span>
             </div>
           </div>
         </section>
 
-        <section className="game-card">
+        <section className="game-card" id="daily-interview-panel" role="tabpanel" aria-labelledby={`tab-${career}`} tabIndex={0}>
           <div className="card-head">
             <div>
               <p className="eyebrow">
@@ -941,6 +688,9 @@ export default function Home() {
             </h2>
           </div>
 
+          {syncing && <p className="save-note" role="status">Loading saved progress…</p>}
+          {notice && <p className="save-note" role="status">{notice}</p>}
+
           {!result ? (
             <>
               <SignedOut>
@@ -979,7 +729,7 @@ export default function Home() {
                   }
                   placeholder="Explain it in your own words…"
                   maxLength={900}
-                  disabled={grading}
+                  disabled={grading || syncing}
                 />
 
                 <span>
@@ -1012,11 +762,11 @@ export default function Home() {
                 disabled={
                   answer.trim().length <
                     18 ||
-                  grading
+                  grading || syncing
                 }
               >
                 {grading
-                  ? "Interviewer is grading..."
+                  ? "Checking your answer..."
                   : rewrite
                     ? "Check My Rewrite"
                     : "Submit Answer"}
@@ -1028,10 +778,7 @@ export default function Home() {
 
               <p className="privacy">
                 <Target size={15} />
-                Your response is evaluated
-                like a real interview
-                answer—not just checked for
-                keywords.
+                Your answer is checked against this question’s learning rubric.
               </p>
             </>
           ) : (
@@ -1057,15 +804,14 @@ export default function Home() {
                   </h3>
 
                   <p>
-                    Graded like a technical
-                    interview response.
+                    {careerName} · Rubric-based feedback
                   </p>
                 </div>
               </div>
 
               <article className="ideal">
                 <p className="eyebrow">
-                  INTERVIEWER VERDICT
+                  ANSWER FEEDBACK
                 </p>
 
                 <p>
@@ -1243,6 +989,8 @@ export default function Home() {
                     <h3>
                       {result.label}
                     </h3>
+
+                    <p className="share-track">{careerName}</p>
 
                     <div className="share-details">
                       <span>
