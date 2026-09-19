@@ -192,6 +192,8 @@ Browser saves are scoped to both career and signed-in account (or guest). Old `i
 
 Run `npm run test:careers` for bank integrity, grading, API routing, Eastern/DST rotation, legacy saves, and independent account progress. Run `npm run build:vercel` for the production build, with the existing Clerk publishable key configured.
 
+After building, run `npx playwright install chromium` once, then `npm run test:browser`. This regression check keeps sign-in unloaded and verifies guest play, grading, saved results, account recovery, and mobile layout. Authentication must never block the daily game; while Clerk connects, guests can play and save results on their device.
+
 ## Current Question Categories
 
 The current Computer Hardware Engineering track includes topics such as:

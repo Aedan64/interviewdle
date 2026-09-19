@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Check, Download, Flame, Mail, Moon, RotateCcw, Share2, Sparkles, Sun, Target, Trophy } from "lucide-react";
-import { SignedIn, SignedOut, SignInButton, UserButton, useAuth } from "@clerk/clerk-react";
+import { SignInButton, UserButton, useAuth } from "@clerk/clerk-react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { CAREERS, DEFAULT_CAREER, careerLabel, type CareerId } from "@/data/careers";
 import { getDailyQuestion } from "@/data/question-bank";
@@ -18,17 +18,19 @@ const serverCareer = () => DEFAULT_CAREER;
 const serverDate = () => "";
 
 export default function Home() {
-  const { isLoaded, userId } = useAuth();
+  const { userId } = useAuth();
   const career = useSyncExternalStore(subscribeCareer, getSelectedCareer, serverCareer);
   const today = useSyncExternalStore(subscribeEasternDate, getEasternDate, serverDate);
-  if (!today || !isLoaded) return <main className="shell" aria-busy="true"><p>Loading today’s interview…</p></main>;
+  // Authentication is optional for practice. Clerk can remain unloaded when
+  // its script is slow or blocked, so only the calendar gates the daily game.
+  if (!today) return <main className="shell" aria-busy="true"><p>Loading today’s interview…</p></main>;
   // Remounting isolates drafts, delayed responses, results and share cards when
   // the track, calendar day, or signed-in person changes.
   return <InterviewGame key={`${career}:${today}:${userId ?? "guest"}`} career={career} today={today} viewerId={userId ?? null} />;
 }
 
 function InterviewGame({ career, today, viewerId }: { career: CareerId; today: string; viewerId: string | null }) {
-  const { isSignedIn, getToken } = useAuth();
+  const { isLoaded, isSignedIn, getToken } = useAuth();
   const careerName = careerLabel(career);
   const [initial] = useState(() => {
     try { return readLocalProgress(localStorage, career, viewerId); }
@@ -578,17 +580,17 @@ function InterviewGame({ career, today, viewerId }: { career: CareerId; today: s
             </button>
           </div>
 
-          <SignedOut>
+          {isSignedIn ? (
+            <UserButton />
+          ) : isLoaded ? (
             <SignInButton mode="modal">
               <button className="sign-in">
                 Sign in
               </button>
             </SignInButton>
-          </SignedOut>
-
-          <SignedIn>
-            <UserButton />
-          </SignedIn>
+          ) : (
+            <span className="guest-status">Guest mode</span>
+          )}
         </div>
       </header>
 
@@ -693,21 +695,19 @@ function InterviewGame({ career, today, viewerId }: { career: CareerId; today: s
 
           {!result ? (
             <>
-              <SignedOut>
+              {!isSignedIn && (
                 <div className="save-note">
-                  <span>
-                    Play as a guest, or{" "}
-                  </span>
-
-                  <SignInButton mode="modal">
-                    <button>
-                      sign in to save progress
-                      across devices
-                    </button>
-                  </SignInButton>
-                  .
+                  {isLoaded ? (
+                    <>
+                      Play as a guest, or{" "}
+                      <SignInButton mode="modal">
+                        <button>sign in to save progress across devices</button>
+                      </SignInButton>
+                      .
+                    </>
+                  ) : "You can play now. Results are saved on this device while sign-in connects."}
                 </div>
-              </SignedOut>
+              )}
 
               <label htmlFor="answer">
                 Answer like you&apos;re
